@@ -37,7 +37,9 @@ app.post("/", async (req, res) => {
   const collection = await db.collection("users");
   const data = await collection.findOne({ name });
   if (data) {
-    await collection.updateOne({ _id: data._id }, { $set: { name, points } });
+    if (data.points < points) {
+      await collection.updateOne({ _id: data._id }, { $set: { name, points } });
+    }
   } else {
     await collection.insertOne({ name, points });
   }
