@@ -1,37 +1,48 @@
-const fs = require("fs");
+const { MongoClient, ServerApiVersion } = require("mongodb");
 const express = require("express");
 const app = express();
 const cors = require("cors");
-const path = require("path");
+require("dotenv").config();
 const PORT = process.env.PORT || 3000;
 
-const historyFile = path.join(__dirname, "/history.json");
-
-const getHistory = () => {
-  let rawdata = fs.readFileSync(historyFile);
-  let history = JSON.parse(rawdata);
-
-  return history;
-};
+const uri = `mongodb+srv://gustavo:${process.env.DB_PASSWORD}@cluster0.kfflwab.mongodb.net/?retryWrites=true&w=majority`;
+const client = new MongoClient(uri, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverApi: ServerApiVersion.v1,
+});
 
 app.use(cors());
 app.use(express.json());
 
-app.get("/", function (req, res) {
-  const history = getHistory();
+app.get("/", async function (req, res) {
+  const connection = await client.connect();
+  const db = await connection.db("ranking");
+  const collection = await db.collection("users");
+  const data = await collection
+    .find({}, { projection: { _id: 0 } })
+    .sort({ points: -1 })
+    .limit(5)
+    .toArray();
+  connection.close();
 
-  const rank = Object.entries(history)
-    .sort(([nameA, pointsA], [nameB, pointsB]) => pointsB - pointsA)
-    .splice(0, 5);
-
-  res.send(rank);
+  res.send(data);
 });
 
-app.post("/", (req, res) => {
-  const history = getHistory();
-  const newHistory = { ...history, [req.body.name]: req.body.points };
+app.post("/", async (req, res) => {
+  const { name, points } = req.body;
 
-  fs.writeFileSync(historyFile, JSON.stringify(newHistory));
+  const connection = await client.connect();
+  const db = await connection.db("ranking");
+  const collection = await db.collection("users");
+  const data = await collection.findOne({ name });
+  if (data) {
+    await collection.updateOne({ _id: data._id }, { $set: { name, points } });
+  } else {
+    await collection.insertOne({ name, points });
+  }
+  connection.close();
+
   res.send({ ok: true });
 });
 
